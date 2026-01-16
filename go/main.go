@@ -25,7 +25,13 @@ func main() {
 	}()
 
 	fileName := "streamdeck-logitech-litra-lights.log"
-	f, err := os.CreateTemp("logs", fileName)
+
+// ensure logs directory exists next to the binary
+_ = os.MkdirAll("logs", 0755)
+
+f, err := os.CreateTemp("logs", fileName)
+
+
 	if err != nil {
 		log.Printf("error creating temp file: %v", err)
 		exitCode = 83
@@ -236,8 +242,10 @@ func handleSetLights(
 }
 
 const (
-	VID = 0x046d
-	PID = 0xc900
+	VID = 0x046d // Logitech
+
+	PID_LITRA_GLOW = 0xc900 // bestehendes Modell
+	PID_LITRA_BEAM = 0xC8F1 // Litra Beam (51457 dezimal)
 )
 
 // writeToLights opens a connection to each light attached to the computer
@@ -256,19 +264,32 @@ func writeToLights(theFunc hid.EnumFunc) error {
 		}
 	}()
 
-	err = hid.Enumerate(VID, PID, theFunc)
-	if err != nil {
-		return err
-	}
+// Enumerate ALL Logitech HID devices (PID = 0 means "any")
+if err := hid.Enumerate(VID, 0, theFunc); err != nil {
+	log.Println("enumerate failed", err)
+}
 
 	return nil
 }
 
 func sendBrightnessAndTemperature(settings Settings) hid.EnumFunc {
 	return func(deviceInfo *hid.DeviceInfo) error {
+log.Printf(
+	"Found HID device: VID=0x%04x PID=0x%04x Interface=%d Serial=%s\n",
+	deviceInfo.VendorID,
+	deviceInfo.ProductID,
+	deviceInfo.InterfaceNbr,
+	deviceInfo.SerialNbr,
+)
 		var err error
 
-		d, err := hid.Open(VID, PID, deviceInfo.SerialNbr)
+
+d, err := hid.Open(
+	deviceInfo.VendorID,
+	deviceInfo.ProductID,
+	deviceInfo.SerialNbr,
+)
+
 		if err != nil {
 			log.Println("Unable to open", err)
 
@@ -319,8 +340,13 @@ func sendTurnOffLights() hid.EnumFunc {
 	return func(deviceInfo *hid.DeviceInfo) error {
 		var err error
 
-		d, err := hid.Open(VID, PID, deviceInfo.SerialNbr)
-		if err != nil {
+d, err := hid.Open(
+	deviceInfo.VendorID,
+	deviceInfo.ProductID,
+	deviceInfo.SerialNbr,
+)		
+
+if err != nil {
 			log.Println("unable to open", err)
 
 			return err
